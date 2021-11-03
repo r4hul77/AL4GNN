@@ -15,6 +15,7 @@ import pandas as pd
 
 ##
 class GenerateData():
+
     def __init__(self):
         print("Generation class is invoked")
 
