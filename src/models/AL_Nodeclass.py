@@ -173,6 +173,7 @@ def run(args, device, data, checkpoint_path, best_model_path):
 
     # Define model and optimizer
     model = SAGE(in_feats, args.hidden_dim, n_classes, args.num_layers, F.relu, args.dropout)
+
     print("== # model parameters: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
     model = model.to(device)
@@ -264,10 +265,10 @@ if __name__ == '__main__':
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
     argparser.add_argument('--dataset', type=str, default='PLC')
-    argparser.add_argument('--num-epochs', type=int, default = 100)
+    argparser.add_argument('--num-epochs', type=int, default = 50)
     argparser.add_argument('--hidden_dim', type=int, default = 48)
-    argparser.add_argument('--num-layers', type=int, default=3)
-    argparser.add_argument('--fan-out', type=str, default='8,10,8')
+    argparser.add_argument('--num-layers', type=int, default=2)
+    argparser.add_argument('--fan-out', type=str, default='8,10')
     argparser.add_argument('--batch-size', type=int, default=50)
     argparser.add_argument('--log-every', type=int, default=20)
     argparser.add_argument('--eval-every', type=int, default=5)
@@ -325,5 +326,5 @@ if __name__ == '__main__':
     data = n_classes, train_g, val_g, train_nfeat, train_labels, \
            val_nfeat, val_labels, g
 
-    run(args, device, data, cnf.modelpath + "\\current_checkpoint_cora.pt", cnf.modelpath + "\\cora_uc.pt")
+    run(args, device, data, cnf.modelpath + "\\current_checkpoint_cora_3.pt", cnf.modelpath + "\\cora_3.pt")
 
