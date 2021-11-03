@@ -19,6 +19,6 @@ processed graphs: edge weights-influence probability, node features, node lables
 Note: There are other files that are developed on fly but are not needed for the output generation.
 
 ## Contributors
-1. Rahul Harsha Cheppally \
-2. Aneesh Duraiswaamy \
+1. Rahul Harsha Cheppally
+2. Aneesh Duraiswaamy
 3. Sai Munikoti
