@@ -1,15 +1,24 @@
-===================== Folder structure: BGNN for Node/link classification ==============
+# Active learning for Graph neural networks (AL4GNN)
+A scalable active learning framework for GNN tasks on Large graphs.
 
-1. src_bgnn/data/make_dataset_uncertpropag.py : load graph and target vector with weights
+## Folder structure
 
-2. src_bgnn/models/variance_trainedntwrk_uncertprop.py: get mean and variance of prediction from trained model weights and graph 
+### data
+processed graphs: edge weights-influence probability, node features, node lables.
 
-3. src_bgnn/models/Semisup_nodeclasf_uncertpropag.py: Train node classification model on weighted graphs 
+### src
+1. src/data/config.py: project directory paths
+2. src/data/utils.py: utility functions
+3. src/data/make_graph.py: preprocess raw graphs 
+4. src/data/make_dglgraph.py: prepare graphs for dgl liblary
+5. src/data/load_graph.py: load graph in dgl liblary
 
-4. utils.py: helping functions
+### models
+1. Trained node classification (candidiate node identiifcation) pytorch models.\
 
-5. src_bgnn/features/build_features.py: helping function for feature extyraction
+Note: There are other files that are developed on fly but are not needed for the output generation.
 
-6. src_bgnn/visualization/visual.py: helping functions for visualizing features 
-
-===============================================================================================================
+## Contributors
+Rahul Harsha Cheppally 
+Aneesh Duraiswaamy 
+Sai Munikoti
