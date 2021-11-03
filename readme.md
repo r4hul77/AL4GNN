@@ -7,11 +7,7 @@ A scalable active learning framework for GNN tasks on Large graphs.
 processed graphs: edge weights-influence probability, node features, node lables.
 
 ### src
-1. src/data/config.py: project directory paths
-2. src/data/utils.py: utility functions
-3. src/data/make_graph.py: preprocess raw graphs 
-4. src/data/make_dglgraph.py: prepare graphs for dgl liblary
-5. src/data/load_graph.py: load graph in dgl liblary
+Contain all script files
 
 ### models
 1. Trained node classification (candidiate node identiifcation) pytorch models.\
