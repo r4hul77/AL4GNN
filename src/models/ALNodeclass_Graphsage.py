@@ -169,6 +169,82 @@ def load_ckp(checkpoint_fpath, model):
     valid_loss_min = checkpoint['valid_loss_min']
     return model, valid_loss_min.item()
 
+# ============= get validation test mask in graph ================
+def get_valtest_mask(graph, n_classes, val_size, test_size, base_size):
+        array_lst_class = []
+        for cclass in range(n_classes):
+            array_lst_class.append([])
+
+        for node in graph.nodes():
+            temp = graph.ndata['label'][node]
+            array_lst_class[temp].append(node.item())
+
+        rng = random.Random(69)
+        array_lst_base_train = [rng.sample(array_lst_class[ind], base_size) for ind in range(n_classes)]
+
+        array_lst_avail_val = []
+        for ind in range(n_classes):
+            array_lst_avail_val.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind]])
+
+        array_lst_val = [rng.sample(array_lst_avail_val[ind], val_size) for ind in range(n_classes)]
+        lst_val = [item for sublist in array_lst_val for item in sublist]
+
+        array_lst_avail_test = []
+        for ind in range(n_classes):
+            array_lst_avail_test.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind] and elem not in array_lst_val[ind] ])
+
+        array_lst_test = [rng.sample(array_lst_avail_test[ind], test_size) for ind in range(n_classes)]
+        lst_test = [item for sublist in array_lst_test for item in sublist]
+
+        array_lst_avail_train = []
+        for ind in range(n_classes):
+            array_lst_avail_train.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind]
+                                          and elem not in array_lst_val[ind] and elem not in array_lst_test[ind] ])
+
+        n_nodes = graph.num_nodes()
+        val_mask = th.zeros(n_nodes, dtype=th.bool)
+        test_mask = th.zeros(n_nodes, dtype=th.bool)
+
+        val_mask[lst_val] = True
+        test_mask[lst_test] = True
+
+        graph.ndata['val_mask'] = val_mask
+        graph.ndata['test_mask'] = test_mask
+
+        return array_lst_base_train, array_lst_avail_train
+
+# ============= sampled new nodes from unlabeled pool using query strategy ================
+def get_query(array_lst_avail_train, query_batch_size, query_strategy):
+
+    if query_strategy == "random_selection":
+        array_lst_sampled = [random.sample(array_lst_avail_train[ind], query_batch_size) for ind in range(n_classes)]
+
+    return array_lst_sampled
+
+# ============= get new updated train test mask in graph ================
+def update_train_mask(graph, n_classes, array_lst_base_train, array_lst_avail_train, array_lst_sampled):
+
+    array_lst_train = [array_lst_base_train[ind] + array_lst_sampled[ind] for ind in range(n_classes)]
+
+    lst_train = [item for sublist in array_lst_train for item in sublist]
+
+    n_nodes = graph.num_nodes()
+    train_mask = th.zeros(n_nodes, dtype=th.bool)
+
+    train_mask[lst_train] = True
+
+    graph.ndata['train_mask'] = train_mask
+
+    # ====== update base train
+    array_lst_base_train = array_lst_train.copy()
+
+    # ======= update avail train
+    array_lst_avail_train_new = []
+    for ind in range(n_classes):
+        array_lst_avail_train_new.append([elem for elem in array_lst_avail_train[ind] if elem not in array_lst_sampled[ind]])
+
+    return array_lst_base_train, array_lst_avail_train_new
+
 #### Entry point
 
 def run(args, device, data, checkpoint_path, best_model_path):
@@ -366,11 +442,11 @@ if __name__ == '__main__':
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
     argparser.add_argument('--n_class', type=int, default = 7)
-    argparser.add_argument('--n_queries', type=int, default = 10)
+    argparser.add_argument('--n_queries', type=int, default = 20)
     argparser.add_argument('--query_batch_size', type=int, default = 1)
     argparser.add_argument('--val_size_perclass', type=int, default = 5)
     argparser.add_argument('--test_size_perclass', type=int, default = 100)
-    argparser.add_argument('--base_size_perclass', type=int, default = 20)
+    argparser.add_argument('--base_size_perclass', type=int, default = 5)
 
     argparser.add_argument('--num-epochs', type=int, default = 10)
     argparser.add_argument('--hidden_dim', type=int, default = 48)
@@ -419,85 +495,8 @@ if __name__ == '__main__':
 
     n_classes = args.n_class
 
-    def get_valtest_mask(graph, n_classes, val_size, test_size, base_size):
-        array_lst_class = []
-        for cclass in range(n_classes):
-            array_lst_class.append([])
-
-        for node in graph.nodes():
-            temp = graph.ndata['label'][node]
-            array_lst_class[temp].append(node.item())
-
-        rng = random.Random(69)
-        array_lst_base_train = [rng.sample(array_lst_class[ind], base_size) for ind in range(n_classes)]
-
-        array_lst_avail_val = []
-        for ind in range(n_classes):
-            array_lst_avail_val.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind]])
-
-        array_lst_val = [rng.sample(array_lst_avail_val[ind], val_size) for ind in range(n_classes)]
-        lst_val = [item for sublist in array_lst_val for item in sublist]
-
-        array_lst_avail_test = []
-        for ind in range(n_classes):
-            array_lst_avail_test.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind] and elem not in array_lst_val[ind] ])
-
-        array_lst_test = [rng.sample(array_lst_avail_test[ind], test_size) for ind in range(n_classes)]
-        lst_test = [item for sublist in array_lst_test for item in sublist]
-
-        array_lst_avail_train = []
-        for ind in range(n_classes):
-            array_lst_avail_train.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind]
-                                          and elem not in array_lst_val[ind] and elem not in array_lst_test[ind] ])
-
-        n_nodes = graph.num_nodes()
-        val_mask = th.zeros(n_nodes, dtype=th.bool)
-        test_mask = th.zeros(n_nodes, dtype=th.bool)
-
-        val_mask[lst_val] = True
-        test_mask[lst_test] = True
-
-        graph.ndata['val_mask'] = val_mask
-        graph.ndata['test_mask'] = test_mask
-
-        return array_lst_base_train, array_lst_avail_train
-
     array_lst_base_train, array_lst_avail_train = get_valtest_mask(g, n_classes, args.val_size_perclass,
                                                                    args.test_size_perclass, args.base_size_perclass)
-
-    # ============= sampled new nodes from unlabeled pool using query strategy ================
-
-    def get_query(array_lst_avail_train, query_batch_size, query_strategy):
-
-        if query_strategy == "random_selection":
-            array_lst_sampled = [random.sample(array_lst_avail_train[ind], query_batch_size) for ind in range(n_classes)]
-
-        return array_lst_sampled
-
-    # ============= get new updated train test mask in graph ================
-
-    def update_train_mask(graph, n_classes, array_lst_base_train, array_lst_avail_train, array_lst_sampled):
-
-        array_lst_train = [array_lst_base_train[ind] + array_lst_sampled[ind] for ind in range(n_classes)]
-
-        lst_train = [item for sublist in array_lst_train for item in sublist]
-
-        n_nodes = graph.num_nodes()
-        train_mask = th.zeros(n_nodes, dtype=th.bool)
-
-        train_mask[lst_train] = True
-
-        graph.ndata['train_mask'] = train_mask
-
-        # ====== update base train
-        array_lst_base_train = array_lst_train.copy()
-
-        # ======= update avail train
-        array_lst_avail_train_new = []
-        for ind in range(n_classes):
-            array_lst_avail_train_new.append([elem for elem in array_lst_avail_train[ind] if elem not in array_lst_sampled[ind]])
-
-        return array_lst_base_train, array_lst_avail_train_new
 
     # loop for query
     train_size_list = []
