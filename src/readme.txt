@@ -12,8 +12,7 @@
 
 6. src/visualization/visual.py: helping functions for visualizing features
 
-7. src/models/AL_nodeclass.py : Train node classification model with the specified training node labels
+7. src/models/ALNodeclass_Graphsage.py : Train and evaluate node classification model with the queried training node labels.
 
-8.  src/models/AL_nodeclass_test.py : Test node classification model with the specified testing node labels
 
 ===============================================================================================================
