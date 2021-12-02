@@ -7,7 +7,23 @@ import sklearn.linear_model as lm
 import sklearn.metrics as skm
 import tqdm
 
+class SAGE_simple(nn.Module):
+    def __init__(self, in_feats, hid_feats, out_feats):
+        super().__init__()
+        self.conv1 = dglnn.SAGEConv(
+            in_feats=in_feats, out_feats=hid_feats, aggregator_type='mean')
+        self.conv2 = dglnn.SAGEConv(
+            in_feats=hid_feats, out_feats=out_feats, aggregator_type='mean')
+
+    def forward(self, graph, inputs):
+        # inputs are features of nodes
+        h = self.conv1(graph, inputs)
+        h = F.relu(h)
+        h = self.conv2(graph, h)
+        return h
+
 class SAGE(nn.Module):
+
     def __init__(self, in_feats, n_hidden, n_classes, n_layers, activation, dropout):
         super().__init__()
         self.init(in_feats, n_hidden, n_classes, n_layers, activation, dropout)
@@ -19,13 +35,13 @@ class SAGE(nn.Module):
         self.layers = nn.ModuleList()
 
         if n_layers > 1:
-            self.layers.append(dglnn.SAGEConv(in_feats, hidden_dim, 'lstm'))
+            self.layers.append(dglnn.SAGEConv(in_feats, hidden_dim, 'mean'))
             for i in range(1, n_layers - 1):
-                self.layers.append(dglnn.SAGEConv(hidden_dim, hidden_dim, 'lstm'))
+                self.layers.append(dglnn.SAGEConv(hidden_dim, hidden_dim, 'mean'))
 
-            self.layers.append(dglnn.SAGEConv(hidden_dim, hidden_dim, 'lstm'))
+            self.layers.append(dglnn.SAGEConv(hidden_dim, hidden_dim, 'mean'))
         else:
-            self.layers.append(dglnn.SAGEConv(in_feats, n_classes, 'lstm'))
+            self.layers.append(dglnn.SAGEConv(in_feats, n_classes, 'mean'))
 
         self.fc1 = nn.Linear(hidden_dim, n_classes)
         # self.fc2 = nn.Linear(16, n_classes)

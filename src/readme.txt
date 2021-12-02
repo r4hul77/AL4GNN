@@ -8,9 +8,9 @@
 
 4. utils.py: helping functions
 
-5. src_bgnn/features/build_features.py: helping function for feature extyraction
+5. src/features/build_features.py: helping function for feature extyraction
 
-6. src_bgnn/visualization/visual.py: helping functions for visualizing features
+6. src/visualization/visual.py: helping functions for visualizing features
 
 7. src/models/AL_nodeclass.py : Train node classification model with the specified training node labels
 

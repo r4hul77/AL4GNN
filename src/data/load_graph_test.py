@@ -15,9 +15,9 @@ class PLCgraphDataset(DGLDataset):
         super().__init__(name='PLC graph')
 
     def process(self):
-        self.train_size = 50
-        self.val_size = 5
-        self.test_size = 150
+        self.train_size = 3
+        self.val_size = 2
+        self.test_size = 100
 
         filepath = cnf.datapath + "\\cora_weighted.gpickle"
 

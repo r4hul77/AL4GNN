@@ -10,7 +10,7 @@ processed graphs: edge weights-influence probability, node features, node lables
 Contain all script files
 
 ### models
-1. Trained node classification (candidiate node identiifcation) pytorch models.\
+1. Trained node classification pytorch models.
 
 Note: There are other files that are developed on fly but are not needed for the output generation.
 

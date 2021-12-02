@@ -17,9 +17,9 @@ class PLCgraphDataset(DGLDataset):
 
     def process(self):
 
-        self.train_size = 50
+        self.train_size = 3
 
-        self.val_size = 5
+        self.val_size = 2
 
         filepath = cnf.datapath + "\\cora_weighted.gpickle"
 
@@ -63,6 +63,8 @@ class PLCgraphDataset(DGLDataset):
 
             elif self.graph.ndata['label'][node]==6:
                 lst_c7.append(node.item())
+
+        # random sample
 
         rng = random.Random(69)
 
