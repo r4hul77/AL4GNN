@@ -9,6 +9,7 @@ import argparse
 import networkx as nx
 from src.models.model import SAGE
 from src.data import utils as ut
+
 from src.data import config as cnf
 import warnings
 import shutil
@@ -169,37 +170,48 @@ def load_ckp(checkpoint_fpath, model):
     valid_loss_min = checkpoint['valid_loss_min']
     return model, valid_loss_min.item()
 
+
+# ============= get initial training set of graph ================
+def get_basetraining_set(graph, n_classes, val_size, test_size, base_size):
+
+    array_lst_class = []
+    for cclass in range(n_classes):
+        array_lst_class.append([])
+
+    for node in graph.nodes():
+        temp = graph.ndata['label'][node]
+        array_lst_class[temp].append(node.item())
+
+    rng = random.Random(69)
+    array_lst_base_train = [rng.sample(array_lst_class[ind], base_size) for ind in range(n_classes)]
+
+    array_lst_avail_val = []
+    for ind in range(n_classes):
+        array_lst_avail_val.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind]])
+
+    array_lst_val = [rng.sample(array_lst_avail_val[ind], val_size) for ind in range(n_classes)]
+    lst_val = [item for sublist in array_lst_val for item in sublist]
+
+    array_lst_avail_test = []
+    for ind in range(n_classes):
+        array_lst_avail_test.append([elem for elem in array_lst_class[ind] if
+                                     elem not in array_lst_base_train[ind] and elem not in array_lst_val[ind]])
+
+    array_lst_test = [rng.sample(array_lst_avail_test[ind], test_size) for ind in range(n_classes)]
+    lst_test = [item for sublist in array_lst_test for item in sublist]
+
+    array_lst_avail_train = []
+    for ind in range(n_classes):
+        array_lst_avail_train.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind]
+                                      and elem not in array_lst_val[ind] and elem not in array_lst_test[ind]])
+
+    array_lst_base_train = [item for sublist in array_lst_base_train for item in sublist]
+    array_lst_avail_train = [item for sublist in array_lst_avail_train for item in sublist]
+
+    return lst_val, lst_test, array_lst_base_train, array_lst_avail_train
+
 # ============= get validation test mask in graph ================
-def get_valtest_mask(graph, n_classes, val_size, test_size, base_size):
-        array_lst_class = []
-        for cclass in range(n_classes):
-            array_lst_class.append([])
-
-        for node in graph.nodes():
-            temp = graph.ndata['label'][node]
-            array_lst_class[temp].append(node.item())
-
-        rng = random.Random(69)
-        array_lst_base_train = [rng.sample(array_lst_class[ind], base_size) for ind in range(n_classes)]
-
-        array_lst_avail_val = []
-        for ind in range(n_classes):
-            array_lst_avail_val.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind]])
-
-        array_lst_val = [rng.sample(array_lst_avail_val[ind], val_size) for ind in range(n_classes)]
-        lst_val = [item for sublist in array_lst_val for item in sublist]
-
-        array_lst_avail_test = []
-        for ind in range(n_classes):
-            array_lst_avail_test.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind] and elem not in array_lst_val[ind] ])
-
-        array_lst_test = [rng.sample(array_lst_avail_test[ind], test_size) for ind in range(n_classes)]
-        lst_test = [item for sublist in array_lst_test for item in sublist]
-
-        array_lst_avail_train = []
-        for ind in range(n_classes):
-            array_lst_avail_train.append([elem for elem in array_lst_class[ind] if elem not in array_lst_base_train[ind]
-                                          and elem not in array_lst_val[ind] and elem not in array_lst_test[ind] ])
+def get_valtest_mask(graph, lst_val, lst_test):
 
         n_nodes = graph.num_nodes()
         val_mask = th.zeros(n_nodes, dtype=th.bool)
@@ -211,39 +223,78 @@ def get_valtest_mask(graph, n_classes, val_size, test_size, base_size):
         graph.ndata['val_mask'] = val_mask
         graph.ndata['test_mask'] = test_mask
 
-        return array_lst_base_train, array_lst_avail_train
+# ============= uncertainty sampling ================
+def get_uncertsampling(args, device, gsample, best_model_path, lst_unlabeled_nodes):
+
+    gsample_new = copy.deepcopy(gsample)
+
+    # update unlabeled mask of sample graph
+    n_nodes = gsample_new.num_nodes()
+    test_mask = th.zeros(n_nodes, dtype=th.bool)
+    test_mask[lst_unlabeled_nodes] = True
+    gsample_new.ndata['test_mask'] = test_mask
+
+    test_g = copy.deepcopy(gsample_new)
+    test_nfeat = test_g.ndata.pop('features')
+    test_labels = test_g.ndata.pop('labels')
+
+    test_nfeat = test_nfeat.to(device)
+    test_labels = test_labels.to(device)
+
+    uc_data = test_g, test_nfeat, test_labels
+
+    y_predprob = run_test_uncertsample(args, device, uc_data, best_model_path)
+
+    # ============= entropy method =============
+    # y_logprob = np.log(y_predprob)
+    # y_pred = np.multiply(y_predprob, y_logprob)
+    # entropy = np.sum(y_pred, axis=1)
+    # entropy = entropy*(-1)
+    # node_sampled = lst_unlabeled_nodes[np.argmax(entropy)]
+
+    #============ class entropy method =
+
+    temp_ypredprob = np.max(y_predprob, axis=1)
+    node_sampled = lst_unlabeled_nodes[np.argmin(temp_ypredprob)]
+
+    return [node_sampled]
 
 # ============= sampled new nodes from unlabeled pool using query strategy ================
-def get_query(array_lst_avail_train, query_batch_size, query_strategy):
+def get_queriedsample(args, device, gsample, best_model_path, lst_unlabeled_nodes, query_batch_size, query_strategy, epsilon=0.0):
 
-    if query_strategy == "random_selection":
-        array_lst_sampled = [random.sample(array_lst_avail_train[ind], query_batch_size) for ind in range(n_classes)]
+    randno = random.uniform(0, 1)
 
-    return array_lst_sampled
+    if randno >= epsilon:
+        if query_strategy == "random_sampling":
+            node_sampled = random.sample(lst_unlabeled_nodes, query_batch_size)
+
+        elif query_strategy == "uncertainty_sampling":
+            node_sampled = get_uncertsampling(args, device, gsample, best_model_path, lst_unlabeled_nodes)
+
+    else:
+        node_sampled = random.sample(lst_unlabeled_nodes, query_batch_size)
+        # array_lst_sampled = [random.sample(lst_unlabeled_nodes[ind], query_batch_size) for ind in range(n_classes)]
+
+    return node_sampled
 
 # ============= get new updated train test mask in graph ================
-def update_train_mask(graph, n_classes, array_lst_base_train, array_lst_avail_train, array_lst_sampled):
+def update_train_mask(graph, lst_labeled_nodes, lst_unlabeled_nodes, node_sampled):
 
-    array_lst_train = [array_lst_base_train[ind] + array_lst_sampled[ind] for ind in range(n_classes)]
-
-    lst_train = [item for sublist in array_lst_train for item in sublist]
+    lst_labeled_nodes.extend(node_sampled)
 
     n_nodes = graph.num_nodes()
     train_mask = th.zeros(n_nodes, dtype=th.bool)
 
-    train_mask[lst_train] = True
+    train_mask[lst_labeled_nodes] = True
 
     graph.ndata['train_mask'] = train_mask
 
-    # ====== update base train
-    array_lst_base_train = array_lst_train.copy()
+    try:
+        lst_unlabeled_nodes.remove(node_sampled.pop())
+    except:
+        pass
 
-    # ======= update avail train
-    array_lst_avail_train_new = []
-    for ind in range(n_classes):
-        array_lst_avail_train_new.append([elem for elem in array_lst_avail_train[ind] if elem not in array_lst_sampled[ind]])
-
-    return array_lst_base_train, array_lst_avail_train_new
+    return lst_labeled_nodes, lst_unlabeled_nodes
 
 #### Entry point
 
@@ -376,7 +427,7 @@ def run_test(args, device, data, best_model_path):
     n_classes, train_g, val_g, test_g, train_nfeat, train_labels, \
     val_nfeat, val_labels, test_nfeat, test_labels, g = data
 
-    in_feats = train_nfeat.shape[1]
+    in_feats = test_nfeat.shape[1]
 
     test_nid = th.nonzero(test_g.ndata['test_mask'], as_tuple=True)[0]
     # test_nid = th.nonzero(~(test_g.ndata['train_mask'] | test_g.ndata['val_mask']), as_tuple=True)[0]
@@ -437,16 +488,103 @@ def run_test(args, device, data, best_model_path):
     # plt.figure(2)
     # plt.plot(np.linspace(1, args.num_epochs, args.num_epochs).astype(int), val_losslist)
 
+def run_test_uncertsample(args, device, data, best_model_path):
+
+    # Unpack data
+    # train_losslist = []
+    # val_losslist = []
+
+    test_g, test_nfeat, test_labels = data
+
+    in_feats = test_nfeat.shape[1]
+
+    test_nid = th.nonzero(test_g.ndata['test_mask'], as_tuple=True)[0]
+
+    dataloader_device = th.device('cpu')
+
+    if args.sample_gpu:
+        test_nid = test_nid.to(device)
+        # copy only the csc to the GPU
+        test_g = test_g.formats(['csc'])
+        test_g = test_g.to(device)
+        dataloader_device = device
+
+    # define dataloader function
+    def get_dataloader(train_g, train_nid, sampler):
+
+        dataloader = dgl.dataloading.NodeDataLoader(
+            train_g,
+            train_nid,
+            sampler,
+            device=dataloader_device,
+            batch_size=args.test_batch_size,
+            shuffle=True,
+            drop_last=False,
+            num_workers=args.num_workers)
+
+        return dataloader
+
+    def softmax(x):
+        """Compute softmax values for each sets of scores in x."""
+        e_x = np.exp(x - np.max(x))
+        return e_x / e_x.sum()
+
+    # Define model and optimizer
+    model = SAGE(in_feats, args.hidden_dim, n_classes, args.num_layers, F.relu, args.dropout)
+
+    model = model.to(device)
+
+    # == customize loss function
+
+    model, valid_loss_min = load_ckp(best_model_path, model)
+
+    sampler = dgl.dataloading.MultiLayerFullNeighborSampler(2)
+
+    # Create PyTorch DataLoader for constructing blocks
+    dataloader = get_dataloader(test_g, test_nid, sampler)
+
+    model.eval()
+
+    # probability prediction
+
+    for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
+
+        with th.no_grad():
+            # Load the input features of all the required input nodes as well as output labels of seeds node in a batch
+            batch_inputs, batch_labels = load_subtensor(test_nfeat, test_labels,
+                                                        seeds, input_nodes, device)
+
+            blocks = [block.int().to(device) for block in blocks]
+
+            # Compute loss and prediction
+            batch_pred = model(blocks, batch_inputs)
+
+    model.train()
+
+    y_pred= batch_pred.cpu().detach().numpy()
+
+    y_predprob = []
+    for count in range(y_pred.shape[0]):
+        y_predprob.append(softmax(y_pred[count,:]))
+
+    return np.array(y_predprob)
+
 if __name__ == '__main__':
+
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
     argparser.add_argument('--n_class', type=int, default = 7)
-    argparser.add_argument('--n_queries', type=int, default = 20)
+    argparser.add_argument('--n_queries', type=int, default = 50)
     argparser.add_argument('--query_batch_size', type=int, default = 1)
-    argparser.add_argument('--val_size_perclass', type=int, default = 5)
-    argparser.add_argument('--test_size_perclass', type=int, default = 100)
-    argparser.add_argument('--base_size_perclass', type=int, default = 5)
+    argparser.add_argument('--val_size', type=int, default = 50)
+    argparser.add_argument('--test_size', type=int, default = 100)
+    argparser.add_argument('--base_size', type=int, default = 10)
+    # argparser.add_argument('--filepath', default = cnf.datapath + "\\pubmed_weighted.gpickle")
+    argparser.add_argument('--checkpointpath', default = cnf.modelpath + "\\current_checkpoint_cora.pt")
+    argparser.add_argument('--bestmodelpath', default = cnf.modelpath + "\\cora_uc.pt")
+    argparser.add_argument('--resultscsvpath', default = cnf.modelpath + "ALResultsdf_cora_b10_q50_classentropy.csv")
+    argparser.add_argument('--test_batch_size', type=int, default= 2700)
 
     argparser.add_argument('--num-epochs', type=int, default = 10)
     argparser.add_argument('--hidden_dim', type=int, default = 48)
@@ -476,27 +614,38 @@ if __name__ == '__main__':
     else:
         device = th.device('cpu')
 
-    filepath = cnf.datapath + '\\plc_4000' + ".gpickle"
-
     # ============= load graph ================
 
-    filepath = cnf.datapath + "\\cora_weighted.gpickle"
-    graph = nx.read_gpickle(filepath)
-    graph = nx.to_directed(graph)
-    g = dgl.from_networkx(graph, node_attrs=['feature', 'label'])
+    # ============= read graph from dgl library ========
 
-    g.ndata['feat'] = g.ndata['feature']
-    g.ndata['label'] = g.ndata['label'].long()
+    # dataset = dgl.data.PubmedGraphDataset()
+    dataset = dgl.data.CoraGraphDataset()
+
+    g = dataset[0]
+
+    #==== read from weighted graph in netwrokx
+
+    # graph = nx.read_gpickle(args.filepath)
+    # graph = nx.to_directed(graph)
+    #
+    # g = dgl.from_networkx(graph, node_attrs=['feature', 'label'])
+    #
+    # g.ndata['feat'] = g.ndata['feature']
+    # g.ndata['label'] = g.ndata['label'].long()
 
     g.ndata['features'] = g.ndata['feat']
     g.ndata['labels'] = g.ndata['label']
+
+    gsample = copy.deepcopy(g)
 
     # ============= get validation test mask in graph ================
 
     n_classes = args.n_class
 
-    array_lst_base_train, array_lst_avail_train = get_valtest_mask(g, n_classes, args.val_size_perclass,
-                                                                   args.test_size_perclass, args.base_size_perclass)
+    lst_val, lst_test, lst_labeled_nodes, lst_unlabeled_nodes = get_basetraining_set(g, n_classes, args.val_size,
+                                                                   args.test_size, args.base_size)
+    # mask val and test nodes
+    get_valtest_mask(g, lst_val, lst_test)
 
     # loop for query
     train_size_list = []
@@ -504,18 +653,20 @@ if __name__ == '__main__':
     train_f1_list = []
     test_acc_list = []
     test_f1_list = []
+    node_sampled_list = []
 
     for cquery in range(args.n_queries+1):
 
         if cquery == 0:
-            array_lst_sampled = []
-            for cclass in range(n_classes):
-                array_lst_sampled.append([])
+            node_sampled = []
         else:
-            array_lst_sampled = get_query(array_lst_avail_train, args.query_batch_size, "random_selection")
+            node_sampled = get_queriedsample(args, device, gsample, args.bestmodelpath, lst_unlabeled_nodes, args.query_batch_size, "uncertainty_sampling", epsilon=0.0)
 
-        array_lst_base_train, array_lst_avail_train = update_train_mask(g, n_classes, array_lst_base_train,
-                                                                        array_lst_avail_train, array_lst_sampled)
+        node_sampled_list.append(node_sampled)
+
+        # update train mask, labled training data and unlabeled training data
+        lst_labeled_nodes, lst_unlabeled_nodes = update_train_mask(g, lst_labeled_nodes,
+                                                                        lst_unlabeled_nodes, node_sampled)
 
         train_g, val_g, test_g = inductive_split(g)
 
@@ -526,7 +677,7 @@ if __name__ == '__main__':
         val_labels = val_g.ndata.pop('labels')
         test_labels = test_g.ndata.pop('labels')
 
-        print("no of train, val nodes", train_nfeat.shape, val_nfeat.shape)
+        print("train, val nodes", train_nfeat.shape, val_nfeat.shape)
         print("input graph size :", train_nfeat.shape)
         print("query no", cquery)
 
@@ -542,12 +693,12 @@ if __name__ == '__main__':
         data = n_classes, train_g, val_g, test_g, train_nfeat, train_labels, \
                val_nfeat, val_labels, test_nfeat, test_labels, g
 
-        # ============= train model on current labled array_lst_base_train data ================
+        # ============= train model on current labled lst_labeled_nodes data ================
 
-        train_acc, train_f1, val_acc, val_f1 = run(args, device, data, cnf.modelpath + "\\current_checkpoint_cora.pt", cnf.modelpath + "\\cora_uc.pt")
+        train_acc, train_f1, val_acc, val_f1 = run(args, device, data, args.checkpointpath, args.bestmodelpath)
 
         # ============= evaluate model on test data ================
-        test_acc, test_loss, test_f1 = run_test(args, device, data, cnf.modelpath + "\\cora_uc.pt")
+        test_acc, test_loss, test_f1 = run_test(args, device, data, args.bestmodelpath)
 
         train_size_list.append(train_nfeat.shape[0])
         train_acc_list.append(train_acc)
@@ -565,8 +716,7 @@ if __name__ == '__main__':
     Resultsdf['test_acc'] = test_acc_list
     Resultsdf['test_f1'] = test_f1_list
 
-    filepath = cnf.modelpath + "ALResultsdf_cora.csv"
-    Resultsdf.to_csv(filepath)
+    Resultsdf.to_csv(args.resultscsvpath)
 
 
 
