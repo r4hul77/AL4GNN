@@ -10,6 +10,8 @@ import networkx as nx
 from src.models.model import SAGE
 from src.data import utils as ut
 
+
+import os
 from src.data import config as cnf
 import warnings
 import shutil
@@ -21,6 +23,9 @@ import random
 import pandas as pd
 import matplotlib.pyplot as plt
 import copy
+
+th.manual_seed(69)
+np.random.seed(69)
 
 ## split the graph
 def inductive_split(g):
@@ -629,15 +634,15 @@ if __name__ == '__main__':
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
     argparser.add_argument('--n_class', type=int, default = 3)
-    argparser.add_argument('--n_queries', type=int, default = 100)
+    argparser.add_argument('--n_queries', type=int, default = 3)
     argparser.add_argument('--query_batch_size', type=int, default = 1)
     argparser.add_argument('--val_size', type=int, default = 20)
     # argparser.add_argument('--test_size', type=int, default = 100)
     argparser.add_argument('--base_size', type=int, default = 50)
-    # argparser.add_argument('--filepath', default = cnf.datapath + "\\pubmed_weighted.gpickle")
-    argparser.add_argument('--checkpointpath', default = cnf.modelpath + "\\current_checkpoint_pubmed.pt")
-    argparser.add_argument('--bestmodelpath', default = cnf.modelpath + "\\pubmed_random.pt")
-    argparser.add_argument('--resultscsvpath', default = cnf.modelpath + "ALResultsdf_pubmed_b50_q100_uncertsamp.csv")
+    # argparser.add_argument('--filepath', default = os.path.join(cnf.datapath, "pubmed_weighted.gpickle"))
+    argparser.add_argument('--checkpointpath', default = os.path.join(cnf.modelpath, "current_checkpoint_pubmed.pt"))
+    argparser.add_argument('--bestmodelpath', default = os.path.join(cnf.modelpath, "pubmed_random.pt"))
+    argparser.add_argument('--resultscsvpath', default = os.path.join(cnf.modelpath, "ALResultsdf_pubmed_b50_q100_uncertsamp.csv"))
     argparser.add_argument('--query_strategy', default = "uncertainty_sampling")
     # argparser.add_argument('--test_batch_size', type=int, default= 19700)
 

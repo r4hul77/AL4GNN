@@ -1,9 +1,11 @@
+import os
 
-projectpath = r"C:\Users\saimunikoti\Manifestation\ALforGNN\AL4GNN"
 
-datapath = projectpath + "\\data"
+projectpath = r"/home/harsha/Desktop/GNN/AL4GNN"
 
-modelpath = projectpath + "\\models\\"
+datapath = os.path.join(projectpath,  "data")
+
+modelpath = os.path.join(projectpath, "models")
 
 
 
