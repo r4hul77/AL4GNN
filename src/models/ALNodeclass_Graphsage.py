@@ -633,7 +633,7 @@ if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
-    argparser.add_argument('--n_class', type=int, default = 7)
+    argparser.add_argument('--n_class', type=int, default = 1)
     argparser.add_argument('--n_queries', type=int, default = 100)
     argparser.add_argument('--query_batch_size', type=int, default = 10)
     argparser.add_argument('--val_size', type=int, default = 20)
@@ -716,7 +716,7 @@ if __name__ == '__main__':
 
     # ============= get validation test mask in graph ================
 
-    n_classes = args.n_class
+    n_classes = dataset.num_classes
 
     lst_val, lst_labeled_nodes, lst_unlabeled_nodes = get_basetraining_set(g, n_classes, args.val_size, args.base_size)
 
