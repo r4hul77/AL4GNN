@@ -9,7 +9,7 @@ import argparse
 import networkx as nx
 from src.models.model import SAGE
 from src.data import utils as ut
-
+from plot_results import *
 
 import os
 from src.data import config as cnf
@@ -633,9 +633,9 @@ if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
-    argparser.add_argument('--n_class', type=int, default = 3)
-    argparser.add_argument('--n_queries', type=int, default = 3)
-    argparser.add_argument('--query_batch_size', type=int, default = 1)
+    argparser.add_argument('--n_class', type=int, default = 7)
+    argparser.add_argument('--n_queries', type=int, default = 100)
+    argparser.add_argument('--query_batch_size', type=int, default = 10)
     argparser.add_argument('--val_size', type=int, default = 20)
     # argparser.add_argument('--test_size', type=int, default = 100)
     argparser.add_argument('--base_size', type=int, default = 50)
@@ -643,6 +643,7 @@ if __name__ == '__main__':
     argparser.add_argument('--checkpointpath', default = os.path.join(cnf.modelpath, "current_checkpoint_pubmed.pt"))
     argparser.add_argument('--bestmodelpath', default = os.path.join(cnf.modelpath, "pubmed_random.pt"))
     argparser.add_argument('--resultscsvpath', default = os.path.join(cnf.modelpath, "ALResultsdf_pubmed_b50_q100_uncertsamp.csv"))
+    argparser.add_argument('--jpegpath', default=os.path.join(cnf.modelpath, "Graph"))
     argparser.add_argument('--query_strategy', default = "uncertainty_sampling")
     # argparser.add_argument('--test_batch_size', type=int, default= 19700)
 
@@ -667,6 +668,8 @@ if __name__ == '__main__':
                                 "be undesired if they cannot fit in GPU memory at once. "
                                 "This flag disables that.")
 
+    argparser.add_argument('--data_set', type=int, default=1)
+
 
     args = argparser.parse_args()
 
@@ -679,9 +682,20 @@ if __name__ == '__main__':
 
     # ============= read graph from dgl library ========
 
-    dataset = dgl.data.PubmedGraphDataset()
-    # dataset = dgl.data.CoraGraphDataset()
-    # dataset = dgl.data.AmazonCoBuyComputerDataset()
+    if(args.data_set == 0):
+        dataset = dgl.data.PubmedGraphDataset()
+        dataset_name = "PubMed"
+
+    elif(args.data_set == 1):
+        dataset = dgl.data.CoraGraphDataset()
+        dataset_name = "Cora"
+    elif(args.data_set==2):
+        dataset = dgl.data.AmazonCoBuyComputerDataset()
+        dataset_name = "Amazon"
+    else:
+        print("Unknown argument sent setting default dataset to Pub Med")
+        dataset = dgl.data.PubmedGraphDataset()
+        dataset_name = "PubMed"
 
     g = dataset[0]
 
@@ -780,6 +794,9 @@ if __name__ == '__main__':
     Resultsdf['test_f1'] = test_f1_list
 
     Resultsdf.to_csv(args.resultscsvpath)
+
+    plot_results(Resultsdf, args.query_strategy, dataset_name, args.resultscsvpath)
+
 
 
 
