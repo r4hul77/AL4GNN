@@ -684,7 +684,7 @@ if __name__ == '__main__':
 
     # ============= read graph from dgl library ========
 
-    query_strategies = ['random_sampling', 'uncertainty_sampling']
+    query_strategies = ['uncertainty_sampling']
 
     for query_strategy in query_strategies:
 

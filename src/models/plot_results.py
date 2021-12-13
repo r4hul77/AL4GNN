@@ -9,7 +9,7 @@ def plot_results(df, method, dataset, save_path=None):
     title =  method + "_" + dataset
     plt.xlabel("Training Dataset size [N]")
     plt.ylabel("Accuracy")
-    plt.title("Accuracy Vs Training Samples " + " " + title)
+    plt.title(title)
     fig1.legend()
     plt.xlabel("Training dataset size(N)")
     fig1.legend()
@@ -20,7 +20,7 @@ def plot_results(df, method, dataset, save_path=None):
     plt.plot(df['train_size'], df['test_f1'], label='test_f1_score')
     plt.xlabel("Training Dataset size [N]")
     plt.ylabel("F1 Score")
-    plt.title("F1 Score vs Training Samples" + " " + title)
+    plt.title(title)
     fig2.legend()
     if save_path:
         fig1.savefig(os.path.join(save_path,"F1_Score.JPEG"))
