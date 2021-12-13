@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import os
+
 
 def plot_results(df, method, dataset, save_path=None):
     fig1 = plt.figure()
@@ -12,7 +14,7 @@ def plot_results(df, method, dataset, save_path=None):
     plt.xlabel("Training dataset size(N)")
     fig1.legend()
     if save_path:
-        fig1.savefig(save_path + "_" + title + "_"  + "Accuracy.JPEG")
+        fig1.savefig(os.path.join(save_path,"Accuracy.JPEG"))
     fig2 = plt.figure()
     plt.plot(df['train_size'], df['train_f1'], label='training_f1_score')
     plt.plot(df['train_size'], df['test_f1'], label='test_f1_score')
@@ -21,6 +23,4 @@ def plot_results(df, method, dataset, save_path=None):
     plt.title("F1 Score vs Training Samples" + " " + title)
     fig2.legend()
     if save_path:
-        fig1.savefig(save_path + "_" + title + "_" + "F1_Score.JPEG")
-
-    plt.show()
+        fig1.savefig(os.path.join(save_path,"F1_Score.JPEG"))

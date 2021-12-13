@@ -7,6 +7,8 @@ datapath = os.path.join(projectpath,  "data")
 
 modelpath = os.path.join(projectpath, "models")
 
+resultspath = os.path.join(projectpath, "Results")
+
 
 
 

@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import time
+import os
 import argparse
 import networkx as nx
 from src.models.model import SAGE
@@ -634,7 +635,7 @@ if __name__ == '__main__':
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
     argparser.add_argument('--n_class', type=int, default = 1)
-    argparser.add_argument('--n_queries', type=int, default = 100)
+    argparser.add_argument('--n_queries', type=int, default = 3)
     argparser.add_argument('--query_batch_size', type=int, default = 10)
     argparser.add_argument('--val_size', type=int, default = 20)
     # argparser.add_argument('--test_size', type=int, default = 100)
@@ -642,7 +643,7 @@ if __name__ == '__main__':
     # argparser.add_argument('--filepath', default = os.path.join(cnf.datapath, "pubmed_weighted.gpickle"))
     argparser.add_argument('--checkpointpath', default = os.path.join(cnf.modelpath, "current_checkpoint_pubmed.pt"))
     argparser.add_argument('--bestmodelpath', default = os.path.join(cnf.modelpath, "pubmed_random.pt"))
-    argparser.add_argument('--resultscsvpath', default = os.path.join(cnf.modelpath, "ALResultsdf_pubmed_b50_q100_uncertsamp.csv"))
+    argparser.add_argument('--resultscsvpath', default = os.path.join(cnf.resultspath, "ALResultsdf_pubmed_b50_q100_uncertsamp.csv"))
     argparser.add_argument('--jpegpath', default=os.path.join(cnf.modelpath, "Graph"))
     argparser.add_argument('--query_strategy', default = "uncertainty_sampling")
     # argparser.add_argument('--test_batch_size', type=int, default= 19700)
@@ -668,7 +669,7 @@ if __name__ == '__main__':
                                 "be undesired if they cannot fit in GPU memory at once. "
                                 "This flag disables that.")
 
-    argparser.add_argument('--data_set', type=int, default=1)
+    argparser.add_argument('--data_set', type=int, default=2)
 
 
     args = argparser.parse_args()
@@ -682,122 +683,141 @@ if __name__ == '__main__':
 
     # ============= read graph from dgl library ========
 
-    if(args.data_set == 0):
-        dataset = dgl.data.PubmedGraphDataset()
-        dataset_name = "PubMed"
+    query_strategies = ['random_sampling', 'uncertainty_sampling']
 
-    elif(args.data_set == 1):
-        dataset = dgl.data.CoraGraphDataset()
-        dataset_name = "Cora"
-    elif(args.data_set==2):
-        dataset = dgl.data.AmazonCoBuyComputerDataset()
-        dataset_name = "Amazon"
-    else:
-        print("Unknown argument sent setting default dataset to Pub Med")
-        dataset = dgl.data.PubmedGraphDataset()
-        dataset_name = "PubMed"
+    for query_strategy in query_strategies:
 
-    g = dataset[0]
+        for data_set in range(3):
 
-    #==== read from weighted graph in netwrokx
+            if(data_set == 0):
+                dataset = dgl.data.PubmedGraphDataset()
+                dataset_name = "PubMed"
 
-    # graph = nx.read_gpickle(args.filepath)
-    # graph = nx.to_directed(graph)
-    #
-    # g = dgl.from_networkx(graph, node_attrs=['feature', 'label'])
-    #
-    # g.ndata['feat'] = g.ndata['feature']
-    # g.ndata['label'] = g.ndata['label'].long()
+            elif(data_set == 1):
+                dataset = dgl.data.CoraGraphDataset()
+                dataset_name = "Cora"
+            elif(data_set==2):
+                dataset = dgl.data.AmazonCoBuyComputerDataset()
+                dataset_name = "Amazon"
+            else:
+                print("Unknown argument sent setting default dataset to Pub Med")
+                dataset = dgl.data.PubmedGraphDataset()
+                dataset_name = "PubMed"
 
-    g.ndata['features'] = g.ndata['feat']
-    g.ndata['labels'] = g.ndata['label']
+            g = dataset[0]
 
-    gsample = copy.deepcopy(g)
+            results_folder = dataset_name + "_" + query_strategy + "q{}".format(args.n_queries)
 
-    # ============= get validation test mask in graph ================
+            results_folder_path = os.path.join(cnf.resultspath, results_folder)
 
-    n_classes = dataset.num_classes
+            start_time = time.time()
 
-    lst_val, lst_labeled_nodes, lst_unlabeled_nodes = get_basetraining_set(g, n_classes, args.val_size, args.base_size)
+            if(not os.path.isdir(results_folder_path)):
+                os.mkdir(results_folder_path)
 
-    # mask val nodes
-    get_valtest_mask(g, lst_val, 'val_mask')
+            #==== read from weighted graph in netwrokx
 
-    # loop for query
-    train_size_list = []
-    train_acc_list = []
-    train_f1_list = []
-    test_acc_list = []
-    test_f1_list = []
-    node_sampled_list = []
+            # graph = nx.read_gpickle(args.filepath)
+            # graph = nx.to_directed(graph)
+            #
+            # g = dgl.from_networkx(graph, node_attrs=['feature', 'label'])
+            #
+            # g.ndata['feat'] = g.ndata['feature']
+            # g.ndata['label'] = g.ndata['label'].long()
 
-    for cquery in range(args.n_queries+1):
+            g.ndata['features'] = g.ndata['feat']
+            g.ndata['labels'] = g.ndata['label']
 
-        if cquery == 0:
-            node_sampled = []
-        else:
-            node_sampled = get_queriedsample(args, device, gsample, args.bestmodelpath, lst_unlabeled_nodes, args.query_batch_size, args.query_strategy, epsilon=0.0)
+            gsample = copy.deepcopy(g)
 
-        node_sampled_list.append(node_sampled)
+            # ============= get validation test mask in graph ================
 
-        # update train mask, labled training data and unlabeled training data
-        lst_labeled_nodes, lst_unlabeled_nodes = update_train_mask(g, lst_labeled_nodes,
-                                                                        lst_unlabeled_nodes, node_sampled)
+            n_classes = dataset.num_classes
 
-        train_g, val_g, test_g = inductive_split(g)
+            lst_val, lst_labeled_nodes, lst_unlabeled_nodes = get_basetraining_set(g, n_classes, args.val_size, args.base_size)
 
-        train_nfeat = train_g.ndata.pop('features')
-        val_nfeat = val_g.ndata.pop('features')
-        test_nfeat = test_g.ndata.pop('features')
-        train_labels = train_g.ndata.pop('labels')
-        val_labels = val_g.ndata.pop('labels')
-        test_labels = test_g.ndata.pop('labels')
+            # mask val nodes
+            get_valtest_mask(g, lst_val, 'val_mask')
 
-        print("train, val nodes", train_nfeat.shape, val_nfeat.shape)
-        print("input graph size :", train_nfeat.shape)
-        print("query no", cquery)
+            # loop for query
+            train_size_list = []
+            train_acc_list = []
+            train_f1_list = []
+            test_acc_list = []
+            test_f1_list = []
+            node_sampled_list = []
 
-        if not args.data_cpu:
-            train_nfeat = train_nfeat.to(device)
-            val_nfeat = val_nfeat.to(device)
-            test_nfeat = test_nfeat.to(device)
-            train_labels = train_labels.to(device)
-            val_labels = val_labels.to(device)
-            test_labels = test_labels.to(device)
+            for cquery in range(args.n_queries+1):
 
-        # Pack data
-        data = n_classes, train_g, val_g, test_g, train_nfeat, train_labels, \
-               val_nfeat, val_labels, test_nfeat, test_labels, g
+                if cquery == 0:
+                    node_sampled = []
+                else:
+                    node_sampled = get_queriedsample(args, device, gsample, args.bestmodelpath, lst_unlabeled_nodes, args.query_batch_size, query_strategy, epsilon=0.0)
 
-        # ============= train model on current labled lst_labeled_nodes data ================
+                node_sampled_list.append(node_sampled)
 
-        train_acc, train_f1, val_acc, val_f1 = run(args, device, data, args.checkpointpath, args.bestmodelpath)
+                # update train mask, labled training data and unlabeled training data
+                lst_labeled_nodes, lst_unlabeled_nodes = update_train_mask(g, lst_labeled_nodes,
+                                                                                lst_unlabeled_nodes, node_sampled)
 
-        # ============= evaluate model on test data ================
+                train_g, val_g, test_g = inductive_split(g)
 
-        test_acc, test_loss, test_f1 = run_test(args, device, gsample, args.bestmodelpath)
+                train_nfeat = train_g.ndata.pop('features')
+                val_nfeat = val_g.ndata.pop('features')
+                test_nfeat = test_g.ndata.pop('features')
+                train_labels = train_g.ndata.pop('labels')
+                val_labels = val_g.ndata.pop('labels')
+                test_labels = test_g.ndata.pop('labels')
 
-        train_size_list.append(train_nfeat.shape[0])
-        train_acc_list.append(train_acc)
-        train_f1_list.append(train_f1)
+                print("train, val nodes", train_nfeat.shape, val_nfeat.shape)
+                print("input graph size :", train_nfeat.shape)
+                print("query no", cquery)
 
-        test_acc_list.append(test_acc)
-        test_f1_list.append(test_f1)
+                if not args.data_cpu:
+                    train_nfeat = train_nfeat.to(device)
+                    val_nfeat = val_nfeat.to(device)
+                    test_nfeat = test_nfeat.to(device)
+                    train_labels = train_labels.to(device)
+                    val_labels = val_labels.to(device)
+                    test_labels = test_labels.to(device)
 
-    # ============= save final results in dataframe ================
-    Resultsdf = pd.DataFrame()
+                # Pack data
+                data = n_classes, train_g, val_g, test_g, train_nfeat, train_labels, \
+                       val_nfeat, val_labels, test_nfeat, test_labels, g
 
-    Resultsdf['train_size'] = train_size_list
-    Resultsdf['train_acc'] = train_acc_list
-    Resultsdf['train_f1'] = train_f1_list
-    Resultsdf['test_acc'] = test_acc_list
-    Resultsdf['test_f1'] = test_f1_list
+                # ============= train model on current labled lst_labeled_nodes data ================
 
-    Resultsdf.to_csv(args.resultscsvpath)
+                train_acc, train_f1, val_acc, val_f1 = run(args, device, data, args.checkpointpath, args.bestmodelpath)
 
-    plot_results(Resultsdf, args.query_strategy, dataset_name, args.resultscsvpath)
+                # ============= evaluate model on test data ================
 
+                test_acc, test_loss, test_f1 = run_test(args, device, gsample, args.bestmodelpath)
 
+                train_size_list.append(train_nfeat.shape[0])
+                train_acc_list.append(train_acc)
+                train_f1_list.append(train_f1)
+
+                test_acc_list.append(test_acc)
+                test_f1_list.append(test_f1)
+
+            # ============= save final results in dataframe ================
+            Resultsdf = pd.DataFrame()
+
+            Resultsdf['train_size'] = train_size_list
+            Resultsdf['train_acc'] = train_acc_list
+            Resultsdf['train_f1'] = train_f1_list
+            Resultsdf['test_acc'] = test_acc_list
+            Resultsdf['test_f1'] = test_f1_list
+
+            Resultsdf.to_csv(os.path.join(results_folder_path, "results.csv"))
+
+            plot_results(Resultsdf, query_strategy, dataset_name, results_folder_path)
+
+            end_time = time.time()
+            total_time = end_time - start_time
+
+            with(open(os.path.join(results_folder_path, "performance.time"), "w")) as f:
+                f.write(str(total_time))
 
 
 
