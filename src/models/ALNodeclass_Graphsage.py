@@ -170,7 +170,6 @@ def load_ckp(checkpoint_fpath, model):
     valid_loss_min = checkpoint['valid_loss_min']
     return model, valid_loss_min.item()
 
-
 # ============= get initial training set of graph ================
 def get_basetraining_set(graph, n_classes, val_size, base_size):
 
@@ -183,6 +182,7 @@ def get_basetraining_set(graph, n_classes, val_size, base_size):
         array_lst_class[temp].append(node.item())
 
     rng = random.Random(69)
+
     array_lst_base_train = [rng.sample(array_lst_class[ind], base_size) for ind in range(n_classes)]
 
     array_lst_avail_val = []
@@ -629,7 +629,7 @@ if __name__ == '__main__':
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
     argparser.add_argument('--n_class', type=int, default = 3)
-    argparser.add_argument('--n_queries', type=int, default = 100)
+    argparser.add_argument('--n_queries', type=int, default = 5)
     argparser.add_argument('--query_batch_size', type=int, default = 1)
     argparser.add_argument('--val_size', type=int, default = 20)
     # argparser.add_argument('--test_size', type=int, default = 100)
@@ -641,7 +641,7 @@ if __name__ == '__main__':
     argparser.add_argument('--query_strategy', default = "uncertainty_sampling")
     # argparser.add_argument('--test_batch_size', type=int, default= 19700)
 
-    argparser.add_argument('--num-epochs', type=int, default = 15)
+    argparser.add_argument('--num-epochs', type=int, default = 10)
     argparser.add_argument('--hidden_dim', type=int, default = 48)
     argparser.add_argument('--num-layers', type=int, default=2)
     argparser.add_argument('--fan-out', type=str, default='8,10')
