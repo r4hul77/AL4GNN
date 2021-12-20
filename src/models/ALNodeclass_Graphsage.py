@@ -636,8 +636,8 @@ if __name__ == '__main__':
                            help="GPU device ID. Use -1 for CPU training")
 
     argparser.add_argument('--n_class', type=int, default = 1)
-    argparser.add_argument('--n_queries', type=int, default = 3)
-    argparser.add_argument('--query_batch_size', type=int, default = 10)
+    argparser.add_argument('--n_queries', type=int, default =200)
+    argparser.add_argument('--query_batch_size', type=int, default = 16)
     argparser.add_argument('--val_size', type=int, default = 20)
     # argparser.add_argument('--test_size', type=int, default = 100)
     argparser.add_argument('--base_size', type=int, default = 50)
@@ -649,7 +649,7 @@ if __name__ == '__main__':
     argparser.add_argument('--query_strategy', default = "uncertainty_sampling")
     # argparser.add_argument('--test_batch_size', type=int, default= 19700)
 
-    argparser.add_argument('--num-epochs', type=int, default = 10)
+    argparser.add_argument('--num-epochs', type=int, default = 5)
     argparser.add_argument('--hidden_dim', type=int, default = 48)
     argparser.add_argument('--num-layers', type=int, default=2)
     argparser.add_argument('--fan-out', type=str, default='8,10')
@@ -684,7 +684,7 @@ if __name__ == '__main__':
 
     # ============= read graph from dgl library ========
 
-    query_strategies = ['uncertainty_sampling']
+    query_strategies = ['random_sampling', 'uncertainty_sampling']
 
     for query_strategy in query_strategies:
 
